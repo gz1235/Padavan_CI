@@ -1,4 +1,4 @@
-name: Build K2P rainbow kvr from vb1980 private repo
+name: Build K2P kvr from vb1980 kvr repo
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
       firmwarever:
         description: 'firmware''s version'
         required: true
-        default: '20210816'
+        default: '20201015'
       busyboxver:
         type: choice
         description: 'busybox''s version'
@@ -14,9 +14,9 @@ on:
         - 1.24.x
         - 1.34.1
         default: '1.24.x'
-      rainbowui:
+      ssp:
         type: boolean
-        description: 'whether to apply rainbow ui'
+        description: 'whether to apply the patch for download ssp bin from local or remote url'
         default: 'true'
       uploadwet:
         type: boolean
@@ -25,9 +25,9 @@ on:
       pushplus:
         type: boolean
         description: 'whether to notify through pushplus'
-        default: 'true'
+        default: 'false'
 env:
-  REPOSITORY_URL: https://vb1980:${{ secrets.PRIVREPOTOKEN }}@github.com/vb1980/my-padavan.git
+  REPOSITORY_URL: https://github.com/vb1980/Padavan-KVR.git
   TOOLCHAIN_URL: https://github.com/hanwckf/padavan-toolchain/releases/download/v1.1/mipsel-linux-uclibc.tar.xz
   WORK_PATH: /opt/rt-n56u
   TIME_ZONE: Asia/Shanghai
@@ -37,7 +37,7 @@ env:
   FIRMWARE_PATH: /opt/firmwares
 jobs:
   build:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-18.04
     if: github.event.repository.owner.id == github.event.sender.id
 
     steps:
@@ -54,7 +54,7 @@ jobs:
         sudo timedatectl set-timezone "$TIME_ZONE"
     - name: Clone source code
       run: |
-        git clone -b xray --depth=1 $REPOSITORY_URL $WORK_PATH
+        git clone --depth=1 $REPOSITORY_URL $WORK_PATH
         cd $WORK_PATH/toolchain-mipsel
         mkdir -p toolchain-3.4.x
         wget $TOOLCHAIN_URL
@@ -70,11 +70,24 @@ jobs:
         sed -i "s/SRC_NAME=busybox.*/SRC_NAME=busybox-${{ github.event.inputs.busyboxver }}/g" ./Makefile
         cd $WORK_PATH/trunk
         sed -i "s/busybox_id=.*/busybox_id=\"${{ github.event.inputs.busyboxver }}\"/g" ./build_firmware_modify
-    - name: Apply rainbow themes
-      if: github.event.inputs.rainbowui == 'true'
+    - name: Recovery SSP bin files download from remote
+      if: github.event.inputs.ssp == 'true'
       run: |
-        cd $WORK_PATH/trunk/user/www
-        sed -i "s/WEBUI_NAME=n56u_ribbon_fixed/WEBUI_NAME=n56u_rainbow/g" ./Makefile
+        cp -f ssp/shadowsocks.sh $WORK_PATH/trunk/user/shadowsocks/scripts
+        #cp -f ssp/defaults.c $WORK_PATH/trunk/user/shared
+        #cp -f ssp/variables.c $WORK_PATH//trunk/user/httpd
+        cp -f ssp/Shadowsocks.asp $WORK_PATH/trunk/user/www/n56u_ribbon_fixed
+        cd $WORK_PATH/trunk/user/shared
+        #sed -i "s#https://cdn.jsdelivr.net/gh/Padavan_CI/ssp/trojan#https://cdn.jsdelivr.net/gh/${{ github.repository_owner }}/Padavan_CI/ssp/trojan#g" ./defaults.c
+        #sed -i "s#https://cdn.jsdelivr.net/gh/Padavan_CI/ssp/v2ray#https://cdn.jsdelivr.net/gh/${{ github.repository_owner }}/Padavan_CI/ssp/v2ray#g" ./defaults.c
+    - name: Update latest adg
+      run: |
+        cp -f adg/adguardhome.sh $WORK_PATH/trunk/user/adguardhome
+        #cp -f adg/defaults.c $WORK_PATH/trunk/user/shared
+        #cp -f adg/variables.c $WORK_PATH//trunk/user/httpd
+        cp -f adg/Advanced_adguardhome.asp $WORK_PATH/trunk/user/www/n56u_ribbon_fixed
+        #cd $WORK_PATH/trunk/user/adguardhome
+        #sed -i "s#https://cdn.jsdelivr.net/gh/chongshengB/rt-n56u/trunk/user/adguardhome/AdGuardHome#https://cdn.jsdelivr.net/gh/${{ github.repository_owner }}/Padavan_CI/adg/AdGuardHome#g" ./adguardhome.sh
     - name: Custom config
       run: |
         cd $WORK_PATH/trunk
@@ -104,6 +117,7 @@ jobs:
         sed -i '/CONFIG_FIRMWARE_INCLUDE_NVPPROXY/d' .config #删除配置项NVPPROXY
         sed -i '/CONFIG_FIRMWARE_INCLUDE_DDNSTO/d' .config #删除配置项DDNSTO
         sed -i '/CONFIG_FIRMWARE_INCLUDE_WIREGUARD/d' .config #删除配置项WIREGUARD
+        sed -i '/CONFIG_FIRMWARE_INCLUDE_ALDRIVER/d' .config #删除配置项阿里云盘
         sed -i '/CONFIG_FIRMWARE_INCLUDE_SMARTDNS/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_SRELAY/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_KUMASOCKS/d' .config
@@ -144,7 +158,7 @@ jobs:
         echo "CONFIG_FIRMWARE_INCLUDE_FRPS=n" >> .config #内网穿透FRPS
         echo "CONFIG_FIRMWARE_INCLUDE_NPC=n" >> .config #删除配置项NPC
         #
-        echo "CONFIG_FIRMWARE_INCLUDE_ADBYBY=y" >> .config #adbyby plus+
+        echo "CONFIG_FIRMWARE_INCLUDE_ADBYBY=n" >> .config #adbyby plus+
         echo "CONFIG_FIRMWARE_INCLUDE_KOOLPROXY=n" >> .config #KP广告过滤
         #
         echo "CONFIG_FIRMWARE_INCLUDE_SMARTDNS=n" >> .config #smartdns
@@ -158,8 +172,11 @@ jobs:
         echo "CONFIG_FIRMWARE_INCLUDE_DDNSTO=n" >> .config #DDNSTO
         echo "CONFIG_FIRMWARE_INCLUDE_WIREGUARD=n" >> .config #WIREGUARD
         #
+        echo "CONFIG_FIRMWARE_INCLUDE_ALDRIVER=n" >> .config #阿里云盘
+        #
         echo "CONFIG_FIRMWARE_INCLUDE_CADDY=n" >> .config #在线文件管理服务
         echo "CONFIG_FIRMWARE_INCLUDE_CADDYBIN=n" >> .config #集成caddu执行文件，此文件有13M,请注意固件大小。如果不集成，会从网上下载下来执行，不影响正常使用
+        echo "CONFIG_FIRMWARE_INCLUDE_ALDRIVER=n" >> .config #阿里云盘
         #
         echo "CONFIG_FIRMWARE_INCLUDE_WYY=n" >> .config #网易云解锁
         echo "CONFIG_FIRMWARE_INCLUDE_WYYBIN=n" >> .config #网易云解锁GO版本执行文件（4M多）注意固件超大小,不集成会自动下载
@@ -191,15 +208,9 @@ jobs:
       id: organize
       run: |
         mkdir -p $FIRMWARE_PATH/
-        cd $WORK_PATH/trunk
-        rainbow_Prefix=""
-        if [ "${{ github.event.inputs.rainbowui }}" = "true" ]
-        then
-        rainbow_Prefix="rainbow_"
-        fi
         cd $WORK_PATH/trunk/images
         for firmwarefile in $(ls *.trx)
-        do sudo mv $firmwarefile $FIRMWARE_PATH/${FIRMWARE_DATEPREFIX}"_"${FIRMWARE_AUTHOR}"_"${rainbow_Prefix}$firmwarefile
+        do sudo mv $firmwarefile $FIRMWARE_PATH/${FIRMWARE_DATEPREFIX}"_"${FIRMWARE_AUTHOR}"_"$firmwarefile
         done
         cd $FIRMWARE_PATH
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
