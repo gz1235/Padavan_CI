@@ -46,7 +46,7 @@ on:
       rainbowui:
         type: boolean
         description: 'whether to apply rainbow ui'
-        default: 'true'
+        default: 'false'
       specializedlogo:
         type: boolean
         description: 'whether to apply specialized logo for e8820s or a-040w-q'
